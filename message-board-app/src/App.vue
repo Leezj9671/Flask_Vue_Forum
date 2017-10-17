@@ -24,6 +24,7 @@
 </template>
 <script>
 import MessageItem from './components/MessageItem.vue'
+var axios = require('axios');
 
 export default {
   name: 'app',
@@ -34,22 +35,37 @@ export default {
 
       // 测试数据
       messages: [
-        {name: 'Jack', text: 'Awesome', created_at: '2017-06-29T11:04:52.226Z'},
-        {name: 'Tom', text: 'I like it', created_at: '2017-06-19T11:04:52.226Z'},
-        {name: 'Alex', text: 'Good job!', created_at: '2017-06-09T11:04:52.226Z'},
+        // {name: 'Jack', text: 'Awesome', created_at: '2017-06-29T11:04:52.226Z'},
+        // {name: 'Tom', text: 'I like it', created_at: '2017-06-19T11:04:52.226Z'},
+        // {name: 'Alex', text: 'Good job!', created_at: '2017-06-09T11:04:52.226Z'},
       ]
     }
   },
   methods: {
     onSubmit() {
-      this.messages.unshift({
-        name: this.name,
-        text: this.text,
-        created_at: new Date().toISOString()
+      axios.post('/api/messages', {
+          'name': this.name,
+          'text': this.text
+      }).then(response => {
+          if (response.data.ok) {
+              this.messages.unshift({
+                  'name': this.name,
+                  'text': this.text,
+                  'created_at': new Date().toISOString()
+              })
+          }
       })
-      this.name = ''
-      this.text = ''
+      // this.messages.unshift({
+      //   name: this.name,
+      //   text: this.text,
+      //   created_at: new Date().toISOString()
+      // })
+      // this.name = ''
+      // this.text = ''
     }
+  },
+  mounted() {
+    axios.get('/api/messages').then(response => this.messages =response.data)
   },
   components: {
     MessageItem
