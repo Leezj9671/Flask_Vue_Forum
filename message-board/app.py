@@ -8,7 +8,7 @@ from flask_sqlalchemy import SQLAlchemy
 # Form 作为所有我们定义的 Form 的基类
 from flask_wtf import FlaskForm as Form
 from wtforms.fields import StringField
-from wtforms.validators import Required, Length
+from wtforms.validators import Required, Length, ValidationError
 from werkzeug.datastructures import MultiDict
 
 app = Flask(__name__)
@@ -39,11 +39,30 @@ class Message(db.Model):
                 'created_at': self.created_at.strftime('%Y-%m-%dT%H:%M:%SZ')}
 
 class MessageForm(Form):
-    """
-    根据 Message Model 定义相应的 Form
-    """
-    name = StringField(validators=[Required(), Length(1, 64)])
-    text = StringField(validators=[Required(), Length(1, 1000)])
+     # 自定义返回信息很简单，只要在每个验证器中添加 `message` 就可以了
+    name = StringField(validators=[
+        Required(message=u'请输入您的姓名'),
+        Length(1, 10, message=u'姓名长度需要在1-10个字符之间')
+    ])
+    text = StringField(validators=[
+        Required(message=u'请输入您的留言'),
+        Length(10, 1000, message=u'留言长度要在10~1000字符之间')
+    ])
+
+     # 这个函数是我们自定义的验证函数，用于检查名字是否已经存在
+     # 要自定义验证函数有一定的格式：
+     #         函数名称：validate + field_name
+     #     参数：要传入 field，在函数中可以通过 `field.data` 获取字段值
+     #        函数体：检测到错误，raise ValidationError
+    def validate_name(self, field):
+        if Message.query.filter_by(name=field.data).first():
+            raise ValidationError(u'名称已经存在')
+
+    def create_message(self):
+        msg = Message(name=self.name.data, text=self.text.data)
+        db.session.add(msg)
+        db.session.commit()
+        return msg
 
 @app.route('/api/messages', methods=['GET'])
 def get_messages():
@@ -51,27 +70,14 @@ def get_messages():
     messages = Message.query.order_by('created_at desc').all()
     return jsonify([message.to_dict() for message in messages])
 
-
 @app.route('/api/messages', methods=['POST'])
 def create_message():
-    # 由于 wtforms 实际上是用来验证表单数据的，当我们想用它来验证 Ajax 传的 JSON
-    # 数据时，需要我们自己去初始化这个 form 
     formdata = MultiDict(request.get_json())
-    form = MessageForm(formdata=formdata, obj=None, csrf=False)
+    form = MessageForm(formdata=formdata, obj=None, csrf_enabled=False)
     if not form.validate():
-          # 数据验证失败时直接返回
-          # form.error 是一个字典，包含 form 字段的所有错误信息，类似：
-          # {'name': ['error1', ...], 'text': ['error1', ...]}
-          # 需要注意的是字段的错误信息都是一个列表
-          # 422 表示 请求是正确的，但服务器处理不了请求的数据
-        return jsonify(ok=False, errors=form.errors), 422
-    # 请求数据无误创建 Message
-    msg = Message(name=formdata['name'], text=formdata['text'])
-    db.session.add(msg)
-    db.session.commit()
-    # 201 表示资源创建成功
-    return jsonify(ok=True), 201
-
+        return jsonify(form.errors), 422
+    msg = form.create_message()
+    return jsonify(msg.to_dict()), 201
 
 if __name__ == '__main__':
     app.run(debug=True)
